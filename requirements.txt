@@ -1,3 +1,4 @@
-opencv
-pillow
+opencv-python
+Pillow
 pyautogui
+numpy
