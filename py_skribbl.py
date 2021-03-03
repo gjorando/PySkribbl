@@ -4,10 +4,14 @@ draws it using mouse inputs. Use it to prank your friends on Skribbl.io!
 """
 
 import time
+import random
+import shutil
+import requests
 import numpy as np
 import cv2
 import pyautogui
 import tkinter as tk
+from bs4 import BeautifulSoup
 from PIL import ImageTk, Image
 
 def find_resized_size(shape, max_size=600):
@@ -71,7 +75,6 @@ def actual_coords(coords, top_left, bottom_right, img_size):
 
     return output
 
-#%%
 
 class PySkribbl(tk.Frame):
     """
@@ -83,7 +86,7 @@ class PySkribbl(tk.Frame):
 
         bg_color = "#333332"
 
-        self.image_path = "clipart.png"
+        self.image_path = ""
         self.image_ed = None
         self.contours = None
 
@@ -134,10 +137,38 @@ class PySkribbl(tk.Frame):
         Query a random image on Google Image to use as a reference.
         """
 
-        # FIXME
+        # FIXME This is still a very very basic scrapper
 
-        self.image_path = self.query_entry.get()
+        query_url = \
+            "https://www.google.com/search?q={}&source=lnms&tbm=isch".format(
+                self.query_entry.get()
+            )
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537"
+            ".36 (KHTML, like Gecko) Chrome/43.0.2357.134 Safari/537.36"
+        }
+
+        response = requests.get(query_url, headers=headers)
+
+        if response.status_code != 200:
+            raise Exception("Error {}".format(response.status_code))
+
+        doc = BeautifulSoup(response.content, "html.parser")
+
+        image_urls = []
+        for a in doc.find_all("img"):
+            image_urls.append(a["src"])
+
+        chosen_url = random.choice(image_urls)
+
+        response = requests.get(chosen_url, stream=True)
+        with open('download.jpg', 'wb') as out_file:
+            shutil.copyfileobj(response.raw, out_file)
+
+        self.image_path = "download.jpg"
         self.set_image()
+
 
     def draw(self):
         """
@@ -186,11 +217,11 @@ class PySkribbl(tk.Frame):
 
         self.instructions.configure(text="Move on top-left corner...")
         self.update()
-        time.sleep(2)
+        time.sleep(3)
         top_left = pyautogui.position()
         self.instructions.configure(text="Move on bottom-right corner...")
         self.update()
-        time.sleep(2)
+        time.sleep(3)
         bottom_right = pyautogui.position()
         self.instructions.configure(text="All done!")
 
@@ -212,17 +243,20 @@ class PySkribbl(tk.Frame):
         :param first: Should be True only in __init__.
         """
 
-        image = cv2.imread(self.image_path)
-        image = cv2.resize(image, find_resized_size(
-            (image.shape[1], image.shape[0])
-        ))
-        self.image_ed = cv2.Canny(image, 100, 200, True)
+        if self.image_path == "":
+            self.image_ed = np.zeros((580, 580), dtype="uint8")
+        else:
+            image = cv2.imread(self.image_path)
+            image = cv2.resize(image, find_resized_size(
+                (image.shape[1], image.shape[0])
+            ))
+            self.image_ed = cv2.Canny(image, 100, 200, True)
 
-        _, self.contours, hierarchy = cv2.findContours(
-            self.image_ed,
-            cv2.RETR_LIST,
-            cv2.CHAIN_APPROX_NONE
-        )
+            _, self.contours, hierarchy = cv2.findContours(
+                self.image_ed,
+                cv2.RETR_LIST,
+                cv2.CHAIN_APPROX_NONE
+            )
 
         self.image = ImageTk.PhotoImage(Image.fromarray(self.image_ed))
 
